@@ -20,6 +20,13 @@ import org.json.JSONObject;
 
 import android.util.Log;
 
+import com.squareup.okhttp.Call;
+import com.squareup.okhttp.MediaType;
+import com.squareup.okhttp.OkHttpClient;
+import com.squareup.okhttp.Request;
+import com.squareup.okhttp.RequestBody;
+import com.squareup.okhttp.Response;
+
 /**
  * Implementation of JSON-RPC over HTTP/POST
  */
@@ -29,7 +36,7 @@ public class JSONRPCHttpClient extends JSONRPCClient
 	/*
 	 * HttpClient to issue the HTTP/POST request
 	 */
-	private HttpClient httpClient;
+	private OkHttpClient httpClient;
 	/*
 	 * Service URI
 	 */
@@ -46,8 +53,8 @@ public class JSONRPCHttpClient extends JSONRPCClient
 	 * @param uri
 	 *            uri of the service
 	 */
-	public JSONRPCHttpClient(HttpClient cleint, String uri){
-		httpClient = cleint;
+	public JSONRPCHttpClient(OkHttpClient okHttpClient, String uri){
+		httpClient = okHttpClient;
 		serviceUri = uri;
 	}
 	
@@ -59,56 +66,36 @@ public class JSONRPCHttpClient extends JSONRPCClient
 	 */
 	public JSONRPCHttpClient(String uri)
 	{
-		this(new DefaultHttpClient(), uri);
+		this(new OkHttpClient(), uri);
 	}
-
+	public static final  MediaType JSON
+    = MediaType.parse("application/json; charset=utf-8");
 	protected JSONObject doJSONRequest(JSONObject jsonRequest) throws JSONRPCException
 	{
-		// Create HTTP/POST request with a JSON entity containing the request
-		HttpPost request = new HttpPost(serviceUri);
-		HttpParams params = new BasicHttpParams();
-		HttpConnectionParams.setConnectionTimeout(params, getConnectionTimeout());
-		HttpConnectionParams.setSoTimeout(params, getSoTimeout());
-		HttpProtocolParams.setVersion(params, PROTOCOL_VERSION);
-		request.setParams(params);
-
 		if(_debug){
 			Log.i(JSONRPCHttpClient.class.toString(), "Request: " + jsonRequest.toString());
 		}
-		
-		HttpEntity entity;
-		
-		try
-		{
-			if(encoding.length() > 0){
-				entity = new JSONEntity(jsonRequest, encoding);
-			}
-			else{
-				entity = new JSONEntity(jsonRequest);
-			}
-		}
-		catch (UnsupportedEncodingException e1)
-		{
-			throw new JSONRPCException("Unsupported encoding", e1);
-		}
-		request.setEntity(entity);
-		
+				
+		RequestBody body = RequestBody.create(JSON, jsonRequest.toString());
+        Request request = new Request.Builder()
+          .url(serviceUri)
+          .post(body)
+          .build();
+        
 		try
 		{
 			// Execute the request and try to decode the JSON Response
 			long t = System.currentTimeMillis();
-			HttpResponse response = httpClient.execute(request);
-			
+			Response response = httpClient.newCall(request).execute();
 			
 			t = System.currentTimeMillis() - t;
-			String responseString = EntityUtils.toString(response.getEntity());
+			String responseString = response.body().string();
 			
 			responseString = responseString.trim();
 			
 			if(_debug){
 				Log.i(JSONRPCHttpClient.class.toString(), "Response: " + responseString);
 			}
-			
 			JSONObject jsonResponse = new JSONObject(responseString);
 			// Check for remote errors
 			if (jsonResponse.has("error"))
